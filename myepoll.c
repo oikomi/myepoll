@@ -16,12 +16,40 @@
 #include <fcntl.h> 
 #include <errno.h> 
 #include <getopt.h> 
+
+#include <sys/time.h>
+#include <sys/types.h>
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+#include <getopt.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <sys/wait.h>
+#include <sys/sendfile.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+#include <net/if.h>
+#include <fcntl.h>
+#include <time.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#include <assert.h>
+#include <signal.h>
+#include <sys/epoll.h>
+#include <pthread.h>
+
  
 #define MAX_EVENTS 500
  
 #define PORT 9527
  
-
+FILE *g_logger;
  
 //设置socket连接为非阻塞模式
  
@@ -57,6 +85,23 @@ static void usage()
 }
  
  
+static void httpstub_log(const char *fmt, ...)
+{
+        //if(0 == g_quiet){
+                char msg[4096];
+                char buf[64];
+                time_t now = time(NULL);
+                va_list ap;
+                va_start(ap, fmt);
+                vsnprintf(msg, sizeof(msg), fmt, ap);
+                va_end(ap);
+                strftime(buf, sizeof(buf), "%d %b %H:%M:%S", localtime(&now));
+                fprintf(g_logger, "[%d] %s %s\n", (int)getpid(), buf, msg);
+                fflush(g_logger);
+        //}
+}
+ 
+ 
 int main(int argc, char **argv)
 {
     struct epoll_event ev, events[MAX_EVENTS];
@@ -86,6 +131,11 @@ int main(int argc, char **argv)
         }
     }
 
+    g_logger = fopen("stub.log", "a");
+    if (g_logger ==NULL) {
+		perror("create log file stub.log failed.");
+        exit(1);
+    }
  
 
     //创建listen socket
@@ -138,6 +188,7 @@ int main(int argc, char **argv)
             fd = events[i].data.fd;
             if (fd == listenfd) {
 				printf("a new connection... \n");
+				httpstub_log("a new connection\n");
                 while ((conn_sock = accept(listenfd,(struct sockaddr *) &remote, 
                                 (socklen_t *)&addrlen)) > 0) {
                     setnonblocking(conn_sock);
